@@ -1,0 +1,2333 @@
+import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
+import {
+  Sparkles, ShoppingBag, X, Plus, Minus, Search, ChevronRight, ChevronLeft,
+  Send, Bot, User, Package, Truck, CheckCircle2, Clock, LayoutDashboard,
+  TrendingUp, Wand2, FileText, Settings, LogOut, Menu, Star, ArrowRight,
+  CreditCard, Banknote, Globe, Filter, AlertCircle, Trash2, Edit3, Download,
+  BarChart3, Boxes, Receipt, Heart, Eye, MapPin, Lock, LogIn, UserPlus, Palette,
+  ShieldCheck, Instagram, Twitter, Youtube, Rss, MessageCircle, ThumbsUp, Bell, BookOpen
+} from "lucide-react";
+
+/* ============================================================
+   A_W PERFUME — Luxury AI-Powered E-Commerce Platform
+   Single-file demo build. See README block at bottom of file
+   for what's production-real vs simulated.
+   ============================================================ */
+
+/* ---------------- Fragrance "AI" generation engine ----------------
+   This simulates an AI product generator (image + copy + SEO) using
+   deterministic, template-driven synthesis so the experience is fully
+   functional offline. In production, swap generateDescription() and
+   generateImage() for real calls to an LLM + image model (see README).
+------------------------------------------------------------------- */
+
+const NOTE_LIBRARY = {
+  top: ["Calabrian Bergamot", "Pink Pepper", "Sicilian Mandarin", "Cardamom", "White Currant", "Bulgarian Rose Petal", "Saffron Thread", "Green Fig Leaf"],
+  heart: ["Damask Rose", "Iris Pallida", "Jasmine Sambac", "Tuberose", "Orris Root", "Violet Leaf", "Osmanthus", "Black Tea Accord"],
+  base: ["Mysore Sandalwood", "Madagascar Vanilla", "Amber Resin", "Oud Wood", "Tonka Bean", "Vetiver", "White Musk", "Patchouli"],
+};
+
+const MOODS = ["Seductive", "Radiant", "Mysterious", "Serene", "Bold", "Romantic", "Magnetic", "Ethereal"];
+const OCCASIONS = ["Evening Gala", "Daily Signature", "Date Night", "Office Elegance", "Wedding", "Summer Escape"];
+const GENDERS = ["Femme", "Homme", "Unisex"];
+
+function pick(arr, n, seedOffset = 0) {
+  const copy = [...arr];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const idx = (i * 7 + seedOffset * 3 + copy.length) % copy.length;
+    out.push(copy.splice(idx % copy.length, 1)[0]);
+  }
+  return out;
+}
+
+function generateFragranceProfile(name, seed = 0) {
+  const top = pick(NOTE_LIBRARY.top, 2, seed);
+  const heart = pick(NOTE_LIBRARY.heart, 2, seed + 1);
+  const base = pick(NOTE_LIBRARY.base, 2, seed + 2);
+  const mood = MOODS[seed % MOODS.length];
+  const occasion = OCCASIONS[(seed + 2) % OCCASIONS.length];
+  const gender = GENDERS[seed % GENDERS.length];
+  return { top, heart, base, mood, occasion, gender };
+}
+
+// Simulated "AI description writer"
+function generateDescription(name, profile) {
+  const { top, heart, base, mood } = profile;
+  const templates = [
+    `${name} opens with an unexpected brightness — ${top[0]} and ${top[1]} colliding in the first breath, before settling into a heart of ${heart[0]} and ${heart[1]}. Beneath it all, ${base[0]} and ${base[1]} linger like a memory that refuses to fade. ${mood} in character, this is a fragrance for those who prefer to be remembered, not introduced.`,
+    `There is a quiet audacity to ${name}. ${top[0]} sparks the opening, ${heart[0]} and ${heart[1]} carry the soul of it, and a base built on ${base[0]} and ${base[1]} ensures it never truly leaves the skin. ${mood} and unapologetic — this is scent as signature.`,
+    `${name} begins with ${top[0]} and ${top[1]}, sharp and alive, then folds into ${heart[0]} at the heart. The drydown — ${base[0]} laced with ${base[1]} — is where the story lingers longest. A ${mood.toLowerCase()} composition, made for skin that intends to be noticed.`,
+  ];
+  return templates[(name.length + top.length) % templates.length];
+}
+
+// Simulated "AI SEO generator"
+function generateSEO(name, profile) {
+  const { mood, occasion, gender } = profile;
+  return {
+    title: `${name} — Luxury ${gender} Eau de Parfum | A_W Perfume`,
+    metaDescription: `Discover ${name}, a ${mood.toLowerCase()} fragrance crafted for ${occasion.toLowerCase()}. Notes of ${profile.top[0]} and ${profile.base[0]}. Free worldwide shipping.`,
+    keywords: [name.toLowerCase(), `luxury ${gender.toLowerCase()} perfume`, `${mood.toLowerCase()} fragrance`, `${occasion.toLowerCase()} perfume`, "designer eau de parfum", "A_W Perfume"],
+  };
+}
+
+/* ---------------- REAL AI description + SEO writer ----------------
+   This calls the live Anthropic API (Claude) to generate genuinely
+   unique product copy and SEO metadata on demand. Falls back to the
+   template generator above if the call fails (offline, rate-limited,
+   etc.) so the UI never breaks.
+------------------------------------------------------------------- */
+
+async function generateDescriptionAndSEO_AI(name, profile) {
+  const prompt = `You are the senior copywriter for A_W Perfume, an ultra-luxury fragrance house (think Dior/Chanel tier). Write product copy for a perfume called "${name}".
+
+Fragrance profile to use as creative material (you may select which notes to foreground, but stay consistent with these):
+- Top notes: ${profile.top.join(", ")}
+- Heart notes: ${profile.heart.join(", ")}
+- Base notes: ${profile.base.join(", ")}
+- Mood: ${profile.mood}
+- Best occasion: ${profile.occasion}
+- Gender category: ${profile.gender}
+
+Write:
+1. A product description (3-5 sentences, evocative, editorial, luxury fashion-house tone — no clichés like "unleash" or "elevate", no exclamation marks)
+2. An SEO title tag (under 60 characters, include the brand name "A_W Perfume")
+3. An SEO meta description (under 155 characters)
+4. 5 SEO keywords as an array of short phrases
+
+Respond ONLY with raw JSON, no markdown fences, no preamble, in exactly this shape:
+{"description": "...", "seoTitle": "...", "seoMetaDescription": "...", "seoKeywords": ["...", "...", "...", "...", "..."]}`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) throw new Error(`AI request failed with status ${response.status}`);
+
+  const data = await response.json();
+  const text = data.content
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .filter(Boolean)
+    .join("\n");
+
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+
+  return {
+    description: parsed.description,
+    seo: {
+      title: parsed.seoTitle,
+      metaDescription: parsed.seoMetaDescription,
+      keywords: parsed.seoKeywords,
+    },
+  };
+}
+
+// Simulated "AI image generator" — produces a deterministic, unique gradient
+// bottle visual per product so every item looks distinct without real image-gen.
+function bottleArt(seed, accent) {
+  const hues = [
+    ["#1a1612", "#3d2f1f", "#d4af6a"],
+    ["#0e0d0c", "#2a2118", "#c89a5b"],
+    ["#16110d", "#4a3826", "#e8c688"],
+    ["#120f0c", "#352618", "#caa86a"],
+  ];
+  return hues[seed % hues.length];
+}
+
+/* ---------------- Seed catalog ---------------- */
+
+const RAW_NAMES = [
+  "Noir Élixir", "Velours d'Or", "Ambre Royale", "Soie Sauvage", "Lueur Dorée",
+  "Nuit Pourpre", "Ombre Précieuse", "Étoile Noire", "Cuir Céleste", "Rêverie d'Iris",
+  "Flamme Discrète", "Brume d'Encens",
+];
+
+const PRICE_BASE = [285, 240, 195, 320, 260, 410, 175, 350, 290, 225, 380, 265];
+
+function buildCatalog() {
+  return RAW_NAMES.map((name, i) => {
+    const profile = generateFragranceProfile(name, i);
+    const desc = generateDescription(name, profile);
+    const seo = generateSEO(name, profile);
+    const art = bottleArt(i, "#d4af6a");
+    return {
+      id: `aw-${i + 1}`,
+      name,
+      price: PRICE_BASE[i],
+      sizeMl: [50, 100][i % 2],
+      profile,
+      description: desc,
+      seo,
+      art,
+      stock: 8 + ((i * 13) % 40),
+      rating: (4.3 + ((i * 7) % 6) / 10).toFixed(1),
+      reviews: 40 + ((i * 31) % 300),
+      featured: i < 4,
+    };
+  });
+}
+
+/* ---------------- Bottle visual component (CSS, not raster) ---------------- */
+
+function BottleArt({ art, size = "normal" }) {
+  const [c1, c2, c3] = art;
+  const dims = size === "large" ? "w-40 h-56 md:w-48 md:h-64" : size === "small" ? "w-16 h-24" : "w-28 h-40";
+  return (
+    <div className={`relative ${dims} mx-auto select-none`} aria-hidden="true">
+      <div
+        className="absolute inset-x-2 top-0 bottom-3 rounded-t-md rounded-b-lg shadow-2xl"
+        style={{
+          background: `linear-gradient(160deg, ${c2} 0%, ${c1} 55%, ${c1} 100%)`,
+          boxShadow: `0 20px 40px -10px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(212,175,106,0.15)`,
+        }}
+      >
+        <div
+          className="absolute left-1/2 -translate-x-1/2 top-2 bottom-2 w-px opacity-40"
+          style={{ background: `linear-gradient(180deg, transparent, ${c3}, transparent)` }}
+        />
+        <div
+          className="absolute inset-x-3 top-3 h-1/3 rounded-sm opacity-20"
+          style={{ background: `linear-gradient(180deg, ${c3}, transparent)` }}
+        />
+      </div>
+      <div
+        className="absolute left-1/2 -translate-x-1/2 -top-5 w-7 h-6 rounded-sm"
+        style={{ background: c3, boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}
+      />
+      <div
+        className="absolute left-1/2 -translate-x-1/2 -top-7 w-3 h-3 rounded-full"
+        style={{ background: c3 }}
+      />
+      <div className="absolute inset-x-2 bottom-0 h-3 rounded-b-lg bg-black/40" />
+    </div>
+  );
+}
+
+/* ---------------- Global store (simulated backend) ---------------- */
+
+/* ---------------- Demo-only password hashing ----------------
+   IMPORTANT: this is NOT real cryptographic security. It's a simple
+   string transform so plain-text passwords aren't sitting in state
+   completely as-typed. Real apps must hash + verify passwords on a
+   real backend server (e.g. bcrypt/argon2 via Node, or a managed
+   auth provider like Supabase/Firebase Auth/Clerk). Never trust
+   client-side-only auth for a real business — see README at the
+   bottom of this file.
+------------------------------------------------------------------- */
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return `h${hash}`;
+}
+
+const StoreContext = createContext(null);
+function useStore() {
+  return useContext(StoreContext);
+}
+
+const TAX_RATE = 0.08;
+const SHIPPING_FLAT = 18;
+const FREE_SHIP_THRESHOLD = 250;
+
+function StoreProvider({ children }) {
+  const [catalog, setCatalog] = useState(() => buildCatalog());
+  const [cart, setCart] = useState([]); // {id, qty}
+  const [orders, setOrders] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
+  const [viewHistory, setViewHistory] = useState([]); // for "smart recommendations"
+  const [discountCode, setDiscountCode] = useState("");
+  const [aiGenerating, setAiGenerating] = useState({}); // { [productId]: boolean }
+  const [aiError, setAiError] = useState({}); // { [productId]: string | null }
+  const orderCounter = useRef(1000);
+
+  /* -------- Auth (demo-only — see README at bottom for production notes) -------- */
+  // Customers: stored in memory as { name, email, passwordHash }.
+  // Admin: single hardcoded demo account, password set below.
+  const [customers, setCustomers] = useState([]); // registered accounts (in-memory)
+  const [currentUser, setCurrentUser] = useState(null); // logged-in customer
+  const [isAdmin, setIsAdmin] = useState(false); // admin session flag
+  const [authError, setAuthError] = useState("");
+  const ADMIN_EMAIL = "admin@awperfume.com";
+  const ADMIN_PASSWORD_HASH = simpleHash("AWAdmin#2026"); // demo admin password
+
+  function signup({ name, email, password }) {
+    setAuthError("");
+    if (!name || !email || !password) { setAuthError("All fields are required."); return false; }
+    if (password.length < 6) { setAuthError("Password must be at least 6 characters."); return false; }
+    if (customers.some((c) => c.email.toLowerCase() === email.toLowerCase())) {
+      setAuthError("An account with this email already exists."); return false;
+    }
+    const newCustomer = { name, email, passwordHash: simpleHash(password) };
+    setCustomers((c) => [...c, newCustomer]);
+    setCurrentUser({ name, email });
+    return true;
+  }
+
+  function login({ email, password }) {
+    setAuthError("");
+    const found = customers.find((c) => c.email.toLowerCase() === email.toLowerCase());
+    if (!found || found.passwordHash !== simpleHash(password)) {
+      setAuthError("Invalid email or password.");
+      return false;
+    }
+    setCurrentUser({ name: found.name, email: found.email });
+    return true;
+  }
+
+  function logout() {
+    setCurrentUser(null);
+  }
+
+  function adminLogin({ email, password }) {
+    setAuthError("");
+    if (email.toLowerCase() !== ADMIN_EMAIL || simpleHash(password) !== ADMIN_PASSWORD_HASH) {
+      setAuthError("Invalid admin credentials.");
+      return false;
+    }
+    setIsAdmin(true);
+    return true;
+  }
+
+  function adminLogout() {
+    setIsAdmin(false);
+  }
+
+  /* -------- Store customization (theme) -------- */
+  const [theme, setTheme] = useState({
+    accent: "#d4af6a",
+    storeName: "A_W",
+    tagline: "TECH & STYLE",
+  });
+
+  /* -------- Reviews system -------- */
+  const [reviews, setReviews] = useState({}); // { [productId]: [{name, rating, comment, date}] }
+
+  function addReview(productId, review) {
+    setReviews((r) => ({
+      ...r,
+      [productId]: [{ ...review, date: new Date().toISOString() }, ...(r[productId] || [])],
+    }));
+  }
+
+  /* -------- Blog posts -------- */
+  const [blogPosts] = useState([
+    {
+      id: "blog-1",
+      title: "Introducing Noir Élixir — Our Most Requested Scent Returns",
+      date: "2026-06-28",
+      tag: "New Launch",
+      excerpt: "After months of anticipation, Noir Élixir is back in a limited 100ml edition. Here's everything you need to know about the relaunch, what changed, and how to get yours before it sells out.",
+      readTime: "3 min read",
+    },
+    {
+      id: "blog-2",
+      title: "A_W Tech & Style Expands to 40+ Countries — Worldwide Shipping Now Live",
+      date: "2026-06-15",
+      tag: "Announcement",
+      excerpt: "We're thrilled to announce that A_W Tech & Style now ships to over 40 countries worldwide with free delivery on orders above $250. Our luxury fragrances are now accessible to customers across Europe, Asia, and the Americas.",
+      readTime: "2 min read",
+    },
+    {
+      id: "blog-3",
+      title: "Summer 2026 Drop: Three New Compositions Inspired by the Mediterranean",
+      date: "2026-06-01",
+      tag: "New Launch",
+      excerpt: "This summer we're releasing three limited-edition fragrances drawing from the sun-soaked coasts of Amalfi, Ibiza, and Santorini. Each bottle tells a story — and each story starts with a single spray.",
+      readTime: "4 min read",
+    },
+    {
+      id: "blog-4",
+      title: "Behind the Bottle: How Our AI Studio Creates Fragrance Profiles",
+      date: "2026-05-20",
+      tag: "Announcement",
+      excerpt: "For the first time, we're sharing a look inside our AI-powered product studio — how we go from a fragrance concept to a complete product listing with notes, mood, occasion, and SEO copy in under 60 seconds.",
+      readTime: "5 min read",
+    },
+  ]);
+
+  function recordView(id) {
+    setViewHistory((h) => [id, ...h.filter((x) => x !== id)].slice(0, 10));
+  }
+
+  function addToCart(id, qty = 1) {
+    setCart((c) => {
+      const existing = c.find((i) => i.id === id);
+      if (existing) return c.map((i) => (i.id === id ? { ...i, qty: i.qty + qty } : i));
+      return [...c, { id, qty }];
+    });
+  }
+  function updateQty(id, qty) {
+    setCart((c) => (qty <= 0 ? c.filter((i) => i.id !== id) : c.map((i) => (i.id === id ? { ...i, qty } : i))));
+  }
+  function removeFromCart(id) {
+    setCart((c) => c.filter((i) => i.id !== id));
+  }
+  function toggleWishlist(id) {
+    setWishlist((w) => (w.includes(id) ? w.filter((x) => x !== id) : [...w, id]));
+  }
+
+  function cartLines() {
+    return cart.map((i) => ({ ...i, product: catalog.find((p) => p.id === i.id) })).filter((l) => l.product);
+  }
+
+  function pricing(discountPct = 0) {
+    const lines = cartLines();
+    const subtotal = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
+    const discount = subtotal * (discountPct / 100);
+    const afterDiscount = subtotal - discount;
+    const shipping = afterDiscount >= FREE_SHIP_THRESHOLD || afterDiscount === 0 ? 0 : SHIPPING_FLAT;
+    const tax = afterDiscount * TAX_RATE;
+    const total = afterDiscount + shipping + tax;
+    return { subtotal, discount, shipping, tax, total };
+  }
+
+  function placeOrder({ customer, payment, discountPct }) {
+    const lines = cartLines();
+    if (lines.length === 0) return null;
+    const totals = pricing(discountPct);
+    const id = `AW-${orderCounter.current++}`;
+    const order = {
+      id,
+      date: new Date().toISOString(),
+      customer,
+      payment,
+      items: lines.map((l) => ({ id: l.id, name: l.product.name, qty: l.qty, price: l.product.price, sizeMl: l.product.sizeMl })),
+      totals,
+      status: "Processing",
+      history: [{ status: "Processing", at: new Date().toISOString() }],
+    };
+    setOrders((o) => [order, ...o]);
+    // decrement stock
+    setCatalog((cat) => cat.map((p) => {
+      const line = lines.find((l) => l.id === p.id);
+      return line ? { ...p, stock: Math.max(0, p.stock - line.qty) } : p;
+    }));
+    setCart([]);
+    return order;
+  }
+
+  function advanceOrderStatus(orderId, status) {
+    setOrders((os) => os.map((o) => o.id === orderId ? {
+      ...o, status, history: [...o.history, { status, at: new Date().toISOString() }]
+    } : o));
+  }
+
+  function updateStock(productId, stock) {
+    setCatalog((cat) => cat.map((p) => p.id === productId ? { ...p, stock } : p));
+  }
+
+  // Real AI-powered regeneration: calls Claude to write fresh description + SEO.
+  // Falls back to the local template generator if the API call fails.
+  async function regenerateProduct(productId) {
+    setAiError((e) => ({ ...e, [productId]: null }));
+    setAiGenerating((g) => ({ ...g, [productId]: true }));
+
+    const current = catalog.find((p) => p.id === productId);
+    if (!current) {
+      setAiGenerating((g) => ({ ...g, [productId]: false }));
+      return;
+    }
+
+    // Shuffle the fragrance profile each regeneration for variety, same as before.
+    const seed = Math.floor(Math.random() * 1000);
+    const profile = generateFragranceProfile(current.name, seed);
+    const art = bottleArt(seed, "#d4af6a");
+
+    try {
+      const { description, seo } = await generateDescriptionAndSEO_AI(current.name, profile);
+      setCatalog((cat) => cat.map((p) => p.id === productId ? { ...p, profile, description, seo, art } : p));
+    } catch (err) {
+      // Fallback to local generator so the UI never breaks if the AI call fails.
+      const description = generateDescription(current.name, profile);
+      const seo = generateSEO(current.name, profile);
+      setCatalog((cat) => cat.map((p) => p.id === productId ? { ...p, profile, description, seo, art } : p));
+      setAiError((e) => ({ ...e, [productId]: "AI generation failed — used local fallback copy instead." }));
+    } finally {
+      setAiGenerating((g) => ({ ...g, [productId]: false }));
+    }
+  }
+
+  const [newProductGenerating, setNewProductGenerating] = useState(false);
+  const [newProductError, setNewProductError] = useState(null);
+
+  // Creates a brand-new fragrance using the real AI writer end-to-end:
+  // given just a name (and optional price/size), Claude generates the
+  // fragrance profile's description + SEO; notes/mood/occasion are
+  // assigned locally for catalog consistency, then woven into the prompt.
+  async function addProduct({ name, price, sizeMl }) {
+    setNewProductError(null);
+    setNewProductGenerating(true);
+    const seed = catalog.length + Math.floor(Math.random() * 50);
+    const profile = generateFragranceProfile(name, seed);
+    const art = bottleArt(seed, "#d4af6a");
+    const id = `aw-${Date.now()}`;
+
+    try {
+      const { description, seo } = await generateDescriptionAndSEO_AI(name, profile);
+      setCatalog((cat) => [
+        ...cat,
+        {
+          id, name, price: Number(price) || 250, sizeMl: Number(sizeMl) || 50,
+          profile, description, seo, art, stock: 25, rating: "4.5", reviews: 0, featured: false,
+        },
+      ]);
+    } catch (err) {
+      const description = generateDescription(name, profile);
+      const seo = generateSEO(name, profile);
+      setCatalog((cat) => [
+        ...cat,
+        {
+          id, name, price: Number(price) || 250, sizeMl: Number(sizeMl) || 50,
+          profile, description, seo, art, stock: 25, rating: "4.5", reviews: 0, featured: false,
+        },
+      ]);
+      setNewProductError("AI generation failed — used local fallback copy instead.");
+    } finally {
+      setNewProductGenerating(false);
+    }
+  }
+
+  const value = {
+    catalog, cart, orders, wishlist, viewHistory, discountCode, setDiscountCode,
+    addToCart, updateQty, removeFromCart, toggleWishlist, cartLines, pricing,
+    placeOrder, advanceOrderStatus, updateStock, regenerateProduct, recordView,
+    aiGenerating, aiError, addProduct, newProductGenerating, newProductError,
+    currentUser, isAdmin, authError, signup, login, logout, adminLogin, adminLogout,
+    theme, setTheme,
+    reviews, addReview, blogPosts,
+  };
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+}
+
+/* ---------------- Shared UI bits ---------------- */
+
+function GoldDivider({ className = "" }) {
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#d4af6a]/50 to-transparent" />
+    </div>
+  );
+}
+
+function Eyebrow({ children }) {
+  return (
+    <p className="text-[11px] tracking-[0.25em] uppercase text-[#d4af6a] font-medium mb-3">{children}</p>
+  );
+}
+
+function Price({ value }) {
+  return <span>${value.toFixed(2)}</span>;
+}
+
+function StarRating({ rating }) {
+  return (
+    <div className="flex items-center gap-1 text-[#d4af6a]">
+      <Star size={12} fill="#d4af6a" strokeWidth={0} />
+      <span className="text-xs text-[#cbbfa8]">{rating}</span>
+    </div>
+  );
+}
+
+/* ---------------- Product Card ---------------- */
+
+function ProductCard({ product, onOpen }) {
+  const { addToCart, toggleWishlist, wishlist } = useStore();
+  const [added, setAdded] = useState(false);
+  const isWished = wishlist.includes(product.id);
+
+  return (
+    <div className="group relative flex flex-col">
+      <button
+        onClick={() => onOpen(product)}
+        className="relative aspect-[3/4] rounded-lg bg-gradient-to-b from-[#15120e] to-[#0c0a08] border border-[#2a2218] overflow-hidden flex items-center justify-center p-6 transition-all duration-500 group-hover:border-[#d4af6a]/40"
+      >
+        <div className="transition-transform duration-700 group-hover:scale-105 group-hover:-translate-y-1">
+          <BottleArt art={product.art} />
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id); }}
+          className="absolute top-3 right-3 p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-colors"
+          aria-label="Save to wishlist"
+        >
+          <Heart size={15} className={isWished ? "fill-[#d4af6a] text-[#d4af6a]" : "text-[#e8e1d3]"} />
+        </button>
+        {product.stock < 10 && (
+          <span className="absolute bottom-3 left-3 text-[10px] tracking-wider uppercase text-[#e8c688] bg-black/50 px-2 py-1 rounded">
+            Only {product.stock} left
+          </span>
+        )}
+      </button>
+      <div className="mt-4 flex-1 flex flex-col">
+        <p className="text-[10px] tracking-[0.2em] uppercase text-[#8b7355] mb-1">{product.profile.gender} · {product.sizeMl}ml</p>
+        <h3 className="font-serif text-lg text-[#f5f0e8] leading-tight">{product.name}</h3>
+        <div className="mt-1"><StarRating rating={product.rating} /></div>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="font-serif text-base text-[#d4af6a]"><Price value={product.price} /></span>
+          <button
+            onClick={() => { addToCart(product.id, 1); setAdded(true); setTimeout(() => setAdded(false), 1400); }}
+            className="text-[11px] tracking-wider uppercase border border-[#d4af6a]/50 text-[#d4af6a] px-3 py-1.5 rounded-full hover:bg-[#d4af6a] hover:text-[#0a0908] transition-all duration-300"
+          >
+            {added ? "Added ✓" : "Add"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Product Detail Modal ---------------- */
+
+function ProductModal({ product, onClose }) {
+  const { addToCart, recordView } = useStore();
+  const [qty, setQty] = useState(1);
+  const [tab, setTab] = useState("notes");
+
+  useEffect(() => {
+    if (product) recordView(product.id);
+    // eslint-disable-next-line
+  }, [product]);
+
+  if (!product) return null;
+  const { profile } = product;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm p-0 md:p-6" onClick={onClose}>
+      <div
+        className="bg-[#100d0a] border border-[#2a2218] rounded-t-2xl md:rounded-2xl w-full md:max-w-3xl max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="grid md:grid-cols-2">
+          <div className="p-8 flex items-center justify-center bg-gradient-to-b from-[#15120e] to-[#0c0a08]">
+            <BottleArt art={product.art} size="large" />
+          </div>
+          <div className="p-7 md:p-8 relative">
+            <button onClick={onClose} className="absolute top-5 right-5 text-[#cbbfa8] hover:text-[#d4af6a]" aria-label="Close">
+              <X size={20} />
+            </button>
+            <p className="text-[10px] tracking-[0.2em] uppercase text-[#8b7355] mb-2">{profile.gender} · {profile.mood} · {product.sizeMl}ml</p>
+            <h2 className="font-serif text-3xl text-[#f5f0e8] mb-2">{product.name}</h2>
+            <StarRating rating={product.rating} />
+            <p className="text-[#cbbfa8] text-sm leading-relaxed mt-4">{product.description}</p>
+
+            <div className="flex gap-5 mt-5 border-b border-[#2a2218]">
+              {["notes", "details"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`pb-2 text-[11px] tracking-wider uppercase ${tab === t ? "text-[#d4af6a] border-b border-[#d4af6a]" : "text-[#8b7355]"}`}
+                >
+                  {t === "notes" ? "Fragrance Notes" : "Shipping & Care"}
+                </button>
+              ))}
+            </div>
+
+            {tab === "notes" ? (
+              <div className="mt-4 space-y-3 text-sm">
+                <NoteRow label="Top" items={profile.top} />
+                <NoteRow label="Heart" items={profile.heart} />
+                <NoteRow label="Base" items={profile.base} />
+                <p className="text-[10px] tracking-wider uppercase text-[#8b7355] mt-2">Best for: {profile.occasion}</p>
+              </div>
+            ) : (
+              <div className="mt-4 text-sm text-[#cbbfa8] space-y-2 leading-relaxed">
+                <p>Complimentary worldwide shipping on orders over $250. Standard delivery in 3–7 business days.</p>
+                <p>Store away from direct sunlight. Each bottle hand-finished and quality-checked before dispatch.</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-4 mt-6">
+              <div className="flex items-center border border-[#2a2218] rounded-full">
+                <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="p-2 text-[#cbbfa8]"><Minus size={14} /></button>
+                <span className="w-8 text-center text-sm text-[#f5f0e8]">{qty}</span>
+                <button onClick={() => setQty((q) => q + 1)} className="p-2 text-[#cbbfa8]"><Plus size={14} /></button>
+              </div>
+              <span className="font-serif text-xl text-[#d4af6a]"><Price value={product.price * qty} /></span>
+            </div>
+
+            <button
+              onClick={() => { addToCart(product.id, qty); onClose(); }}
+              className="w-full mt-5 bg-[#d4af6a] text-[#0a0908] tracking-wider uppercase text-xs py-3.5 rounded-full hover:bg-[#e8c688] transition-colors font-medium"
+            >
+              Add to Bag
+            </button>
+            <ReviewsSection productId={product.id} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NoteRow({ label, items }) {
+  return (
+    <div className="flex gap-3">
+      <span className="w-14 text-[10px] tracking-wider uppercase text-[#8b7355] pt-0.5">{label}</span>
+      <div className="flex gap-2 flex-wrap">
+        {items.map((it) => (
+          <span key={it} className="text-xs text-[#e8e1d3] bg-[#1a1612] border border-[#2a2218] rounded-full px-3 py-1">{it}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Cart Drawer ---------------- */
+
+function CartDrawer({ open, onClose, onCheckout }) {
+  const { cartLines, updateQty, removeFromCart, pricing } = useStore();
+  const lines = cartLines();
+  const totals = pricing();
+
+  return (
+    <div className={`fixed inset-0 z-[80] ${open ? "" : "pointer-events-none"}`}>
+      <div
+        className={`absolute inset-0 bg-black/60 transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`}
+        onClick={onClose}
+      />
+      <div className={`absolute right-0 top-0 h-full w-full sm:w-[420px] bg-[#100d0a] border-l border-[#2a2218] flex flex-col transition-transform duration-400 ${open ? "translate-x-0" : "translate-x-full"}`}>
+        <div className="flex items-center justify-between p-6 border-b border-[#2a2218]">
+          <h3 className="font-serif text-xl text-[#f5f0e8]">Your Bag ({lines.reduce((s, l) => s + l.qty, 0)})</h3>
+          <button onClick={onClose} className="text-[#cbbfa8] hover:text-[#d4af6a]"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {lines.length === 0 && (
+            <div className="text-center py-16">
+              <ShoppingBag className="mx-auto text-[#3d2f1f]" size={36} />
+              <p className="text-[#8b7355] text-sm mt-3">Your bag is empty.</p>
+            </div>
+          )}
+          {lines.map((l) => (
+            <div key={l.id} className="flex gap-4">
+              <div className="w-16 h-20 flex items-center justify-center bg-[#15120e] rounded-md border border-[#2a2218] flex-shrink-0">
+                <BottleArt art={l.product.art} size="small" />
+              </div>
+              <div className="flex-1">
+                <p className="font-serif text-[#f5f0e8] text-sm">{l.product.name}</p>
+                <p className="text-[10px] text-[#8b7355] uppercase tracking-wide">{l.product.sizeMl}ml</p>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center border border-[#2a2218] rounded-full">
+                    <button onClick={() => updateQty(l.id, l.qty - 1)} className="p-1.5 text-[#cbbfa8]"><Minus size={11} /></button>
+                    <span className="w-6 text-center text-xs text-[#f5f0e8]">{l.qty}</span>
+                    <button onClick={() => updateQty(l.id, l.qty + 1)} className="p-1.5 text-[#cbbfa8]"><Plus size={11} /></button>
+                  </div>
+                  <span className="text-sm text-[#d4af6a]"><Price value={l.product.price * l.qty} /></span>
+                </div>
+              </div>
+              <button onClick={() => removeFromCart(l.id)} className="text-[#5a4a38] hover:text-[#d4af6a] self-start"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+        {lines.length > 0 && (
+          <div className="p-6 border-t border-[#2a2218] space-y-2">
+            <div className="flex justify-between text-sm text-[#cbbfa8]"><span>Subtotal</span><span><Price value={totals.subtotal} /></span></div>
+            <div className="flex justify-between text-sm text-[#cbbfa8]"><span>Shipping</span><span>{totals.shipping === 0 ? "Free" : <Price value={totals.shipping} />}</span></div>
+            <div className="flex justify-between text-sm text-[#cbbfa8]"><span>Tax (est.)</span><span><Price value={totals.tax} /></span></div>
+            <div className="flex justify-between font-serif text-lg text-[#f5f0e8] pt-2 border-t border-[#2a2218] mt-2">
+              <span>Total</span><span className="text-[#d4af6a]"><Price value={totals.total} /></span>
+            </div>
+            <button
+              onClick={onCheckout}
+              className="w-full mt-3 bg-[#d4af6a] text-[#0a0908] tracking-wider uppercase text-xs py-3.5 rounded-full hover:bg-[#e8c688] transition-colors font-medium"
+            >
+              Checkout
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Checkout Flow ---------------- */
+
+function Checkout({ onClose, onComplete }) {
+  const { pricing, placeOrder, discountCode, setDiscountCode, currentUser } = useStore();
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: currentUser?.name || "", email: currentUser?.email || "", address: "", city: "", country: "", postal: "" });
+  const [payment, setPayment] = useState("card");
+  const [codeInput, setCodeInput] = useState("");
+  const [discountPct, setDiscountPct] = useState(0);
+  const [codeMsg, setCodeMsg] = useState("");
+
+  const totals = pricing(discountPct);
+
+  function applyCode() {
+    if (codeInput.trim().toUpperCase() === "AW10") {
+      setDiscountPct(10);
+      setCodeMsg("10% discount applied.");
+      setDiscountCode(codeInput);
+    } else {
+      setDiscountPct(0);
+      setCodeMsg("Code not recognized.");
+    }
+  }
+
+  function handlePlaceOrder() {
+    const order = placeOrder({ customer: form, payment, discountPct });
+    if (order) onComplete(order);
+  }
+
+  const canContinue = step === 1
+    ? form.name && form.email && form.address && form.city && form.country
+    : true;
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#100d0a] border border-[#2a2218] rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-[#2a2218]">
+          <h3 className="font-serif text-xl text-[#f5f0e8]">Checkout</h3>
+          <button onClick={onClose} className="text-[#cbbfa8] hover:text-[#d4af6a]"><X size={20} /></button>
+        </div>
+
+        <div className="flex px-6 pt-5 gap-2">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className={`h-1 flex-1 rounded-full ${s <= step ? "bg-[#d4af6a]" : "bg-[#2a2218]"}`} />
+          ))}
+        </div>
+
+        <div className="p-6">
+          {step === 1 && (
+            <div className="space-y-3">
+              <p className="text-[11px] tracking-wider uppercase text-[#8b7355] mb-1">Shipping Information</p>
+              {[
+                ["name", "Full name"], ["email", "Email address"], ["address", "Street address"],
+                ["city", "City"], ["country", "Country"], ["postal", "Postal code"],
+              ].map(([key, label]) => (
+                <input
+                  key={key}
+                  placeholder={label}
+                  value={form[key]}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+                />
+              ))}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <p className="text-[11px] tracking-wider uppercase text-[#8b7355]">Payment Method</p>
+              {[
+                { id: "card", label: "Credit / Debit Card", icon: CreditCard, note: "Visa, Mastercard, Amex — processed securely" },
+                { id: "online", label: "Online Payment", icon: Globe, note: "PayPal, Apple Pay, Google Pay" },
+                { id: "cod", label: "Cash on Delivery", icon: Banknote, note: "Pay when your order arrives" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setPayment(opt.id)}
+                  className={`w-full flex items-center gap-3 p-4 rounded-lg border text-left transition-colors ${payment === opt.id ? "border-[#d4af6a] bg-[#1a1612]" : "border-[#2a2218]"}`}
+                >
+                  <opt.icon size={18} className={payment === opt.id ? "text-[#d4af6a]" : "text-[#8b7355]"} />
+                  <div>
+                    <p className="text-sm text-[#f5f0e8]">{opt.label}</p>
+                    <p className="text-xs text-[#8b7355]">{opt.note}</p>
+                  </div>
+                </button>
+              ))}
+              {payment === "card" && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <input placeholder="Card number" className="col-span-2 bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60" />
+                  <input placeholder="MM/YY" className="bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60" />
+                  <input placeholder="CVC" className="bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60" />
+                  <p className="col-span-2 text-[10px] text-[#5a4a38]">Demo only — no real payment is processed. Connect a provider like Stripe in production.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-4">
+              <p className="text-[11px] tracking-wider uppercase text-[#8b7355]">Order Summary</p>
+              <div className="flex gap-2">
+                <input
+                  placeholder="Discount code (try AW10)"
+                  value={codeInput}
+                  onChange={(e) => setCodeInput(e.target.value)}
+                  className="flex-1 bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-2.5 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+                />
+                <button onClick={applyCode} className="px-4 text-xs uppercase tracking-wider border border-[#d4af6a]/50 text-[#d4af6a] rounded-lg hover:bg-[#d4af6a] hover:text-[#0a0908] transition-colors">Apply</button>
+              </div>
+              {codeMsg && <p className="text-xs text-[#8b7355]">{codeMsg}</p>}
+              <div className="space-y-2 pt-2 border-t border-[#2a2218]">
+                <div className="flex justify-between text-sm text-[#cbbfa8]"><span>Subtotal</span><span><Price value={totals.subtotal} /></span></div>
+                {totals.discount > 0 && <div className="flex justify-between text-sm text-[#d4af6a]"><span>Discount</span><span>-<Price value={totals.discount} /></span></div>}
+                <div className="flex justify-between text-sm text-[#cbbfa8]"><span>Shipping</span><span>{totals.shipping === 0 ? "Free" : <Price value={totals.shipping} />}</span></div>
+                <div className="flex justify-between text-sm text-[#cbbfa8]"><span>Tax</span><span><Price value={totals.tax} /></span></div>
+                <div className="flex justify-between font-serif text-lg text-[#f5f0e8] pt-2 border-t border-[#2a2218]">
+                  <span>Total</span><span className="text-[#d4af6a]"><Price value={totals.total} /></span>
+                </div>
+              </div>
+              <p className="text-xs text-[#8b7355]">Shipping to {form.address}, {form.city}, {form.country}. Paying via {payment === "card" ? "Card" : payment === "cod" ? "Cash on Delivery" : "Online Payment"}.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 pt-0 flex gap-3">
+          {step > 1 && (
+            <button onClick={() => setStep((s) => s - 1)} className="flex-1 border border-[#2a2218] text-[#cbbfa8] text-xs uppercase tracking-wider py-3 rounded-full">Back</button>
+          )}
+          {step < 3 ? (
+            <button
+              disabled={!canContinue}
+              onClick={() => setStep((s) => s + 1)}
+              className="flex-1 bg-[#d4af6a] disabled:opacity-40 text-[#0a0908] text-xs uppercase tracking-wider py-3 rounded-full font-medium"
+            >
+              Continue
+            </button>
+          ) : (
+            <button onClick={handlePlaceOrder} className="flex-1 bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider py-3 rounded-full font-medium">
+              Place Order
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Invoice ---------------- */
+
+function Invoice({ order, onClose }) {
+  if (!order) return null;
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#fbf8f2] text-[#1a1612] rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-7">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="font-serif text-2xl tracking-wide">A_W</p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b7355]">Perfume</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-[#8b7355]">Invoice</p>
+              <p className="font-medium">{order.id}</p>
+              <p className="text-xs text-[#8b7355]">{new Date(order.date).toLocaleDateString()}</p>
+            </div>
+          </div>
+          <div className="mb-5 text-sm">
+            <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-1">Billed To</p>
+            <p className="font-medium">{order.customer.name}</p>
+            <p className="text-[#5a4a38]">{order.customer.email}</p>
+            <p className="text-[#5a4a38]">{order.customer.address}, {order.customer.city}, {order.customer.country}</p>
+          </div>
+          <table className="w-full text-sm mb-4">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-[#8b7355] border-b border-[#d8cdb8]">
+                <th className="pb-2">Item</th><th className="pb-2 text-center">Qty</th><th className="pb-2 text-right">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {order.items.map((it) => (
+                <tr key={it.id} className="border-b border-[#ece5d4]">
+                  <td className="py-2">{it.name} <span className="text-[#8b7355]">({it.sizeMl}ml)</span></td>
+                  <td className="py-2 text-center">{it.qty}</td>
+                  <td className="py-2 text-right">${(it.price * it.qty).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="space-y-1 text-sm ml-auto w-44">
+            <div className="flex justify-between"><span className="text-[#8b7355]">Subtotal</span><span>${order.totals.subtotal.toFixed(2)}</span></div>
+            {order.totals.discount > 0 && <div className="flex justify-between"><span className="text-[#8b7355]">Discount</span><span>-${order.totals.discount.toFixed(2)}</span></div>}
+            <div className="flex justify-between"><span className="text-[#8b7355]">Shipping</span><span>{order.totals.shipping === 0 ? "Free" : `$${order.totals.shipping.toFixed(2)}`}</span></div>
+            <div className="flex justify-between"><span className="text-[#8b7355]">Tax</span><span>${order.totals.tax.toFixed(2)}</span></div>
+            <div className="flex justify-between font-medium pt-1 border-t border-[#d8cdb8]"><span>Total</span><span>${order.totals.total.toFixed(2)}</span></div>
+          </div>
+          <p className="text-[10px] text-[#8b7355] mt-6 text-center">Thank you for choosing A_W Perfume. Payment method: {order.payment === "card" ? "Card" : order.payment === "cod" ? "Cash on Delivery" : "Online Payment"}.</p>
+        </div>
+        <div className="p-5 border-t border-[#ece5d4] flex gap-3">
+          <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-2 text-xs uppercase tracking-wider bg-[#1a1612] text-[#f5f0e8] py-3 rounded-full">
+            <Download size={13} /> Print / Save PDF
+          </button>
+          <button onClick={onClose} className="flex-1 text-xs uppercase tracking-wider border border-[#1a1612]/30 py-3 rounded-full">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Customer Auth Modal (Login / Signup) ---------------- */
+
+function AuthModal({ open, onClose, mode, setMode }) {
+  const { signup, login, authError } = useStore();
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+
+  if (!open) return null;
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const ok = mode === "signup" ? signup(form) : login(form);
+    if (ok) { onClose(); setForm({ name: "", email: "", password: "" }); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#100d0a] border border-[#2a2218] rounded-2xl w-full max-w-sm p-7" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Lock size={15} className="text-[#d4af6a]" />
+            <Eyebrow>Account Security</Eyebrow>
+          </div>
+          <button onClick={onClose} className="text-[#cbbfa8] hover:text-[#d4af6a]"><X size={18} /></button>
+        </div>
+        <h3 className="font-serif text-2xl text-[#f5f0e8] mb-5">{mode === "signup" ? "Create Your Account" : "Welcome Back"}</h3>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {mode === "signup" && (
+            <input
+              placeholder="Full name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Email address"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+          {authError && <p className="text-xs text-[#e07a5f] flex items-center gap-1"><AlertCircle size={12} /> {authError}</p>}
+          <button type="submit" className="w-full bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider py-3 rounded-full font-medium mt-2">
+            {mode === "signup" ? "Create Account" : "Log In"}
+          </button>
+        </form>
+
+        <p className="text-xs text-[#8b7355] text-center mt-5">
+          {mode === "signup" ? "Already have an account?" : "New to A_W Perfume?"}{" "}
+          <button onClick={() => setMode(mode === "signup" ? "login" : "signup")} className="text-[#d4af6a]">
+            {mode === "signup" ? "Log in" : "Sign up"}
+          </button>
+        </p>
+        <p className="text-[10px] text-[#5a4a38] text-center mt-3 flex items-center justify-center gap-1">
+          <ShieldCheck size={11} /> Demo authentication — see production notes in code.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin Login Gate ---------------- */
+
+function AdminGate({ onSuccess, onCancel }) {
+  const { adminLogin, authError } = useStore();
+  const [form, setForm] = useState({ email: "", password: "" });
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (adminLogin(form)) onSuccess();
+  }
+
+  return (
+    <div className="min-h-[70vh] flex items-center justify-center px-6">
+      <div className="bg-[#100d0a] border border-[#2a2218] rounded-2xl w-full max-w-sm p-8">
+        <div className="flex items-center gap-2 mb-1">
+          <Lock size={15} className="text-[#d4af6a]" />
+          <Eyebrow>Restricted Area</Eyebrow>
+        </div>
+        <h3 className="font-serif text-2xl text-[#f5f0e8] mb-1">Admin Access</h3>
+        <p className="text-xs text-[#8b7355] mb-6">Authorized personnel only. This panel controls live orders and inventory.</p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="email"
+            placeholder="Admin email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+          <input
+            type="password"
+            placeholder="Admin password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+          {authError && <p className="text-xs text-[#e07a5f] flex items-center gap-1"><AlertCircle size={12} /> {authError}</p>}
+          <button type="submit" className="w-full bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider py-3 rounded-full font-medium mt-2 flex items-center justify-center gap-2">
+            <LogIn size={13} /> Enter Dashboard
+          </button>
+          <button type="button" onClick={onCancel} className="w-full text-xs text-[#8b7355] py-1">Back to store</button>
+        </form>
+
+        <div className="mt-6 pt-5 border-t border-[#2a2218]">
+          <p className="text-[10px] text-[#5a4a38] leading-relaxed">
+            Demo credentials — email: admin@awperfume.com · password: AWAdmin#2026.
+            In production, replace this with real server-side auth (see code README).
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Store Customization Panel ---------------- */
+
+const ACCENT_PRESETS = [
+  { name: "Classic Gold", value: "#d4af6a" },
+  { name: "Rose Gold", value: "#c9978a" },
+  { name: "Champagne", value: "#e8c688" },
+  { name: "Platinum", value: "#c3c0b8" },
+  { name: "Emerald", value: "#7a9a82" },
+];
+
+function CustomizePanel() {
+  const { theme, setTheme } = useStore();
+  const [draft, setDraft] = useState(theme);
+
+  function apply() {
+    setTheme(draft);
+  }
+
+  return (
+    <div className="bg-[#100d0a] border border-[#1a1612] rounded-xl p-6 max-w-xl">
+      <div className="flex items-center gap-2 mb-1">
+        <Palette size={15} className="text-[#d4af6a]" />
+        <Eyebrow>Storefront Customization</Eyebrow>
+      </div>
+      <h3 className="font-serif text-xl text-[#f5f0e8] mb-5">Brand Appearance</h3>
+
+      <div className="space-y-5">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-2">Store Name</p>
+          <input
+            value={draft.storeName}
+            onChange={(e) => setDraft((d) => ({ ...d, storeName: e.target.value }))}
+            className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-2.5 text-sm text-[#f5f0e8] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-2">Tagline / Suffix</p>
+          <input
+            value={draft.tagline}
+            onChange={(e) => setDraft((d) => ({ ...d, tagline: e.target.value }))}
+            className="w-full bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-2.5 text-sm text-[#f5f0e8] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-2">Accent Color</p>
+          <div className="flex gap-2 flex-wrap">
+            {ACCENT_PRESETS.map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() => setDraft((d) => ({ ...d, accent: preset.value }))}
+                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-full border ${draft.accent === preset.value ? "border-[#d4af6a]" : "border-[#2a2218]"}`}
+              >
+                <span className="w-3 h-3 rounded-full" style={{ background: preset.value }} />
+                {preset.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between bg-[#0c0a08] border border-[#2a2218] rounded-lg p-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-[#8b7355]">Live Preview</p>
+            <p className="font-serif text-lg text-[#f5f0e8] mt-1">
+              {draft.storeName} <span style={{ color: draft.accent }}>{draft.tagline}</span>
+            </p>
+          </div>
+          <div className="px-4 py-2 rounded-full text-[10px] uppercase tracking-wider font-medium" style={{ background: draft.accent, color: "#0a0908" }}>
+            Add to Bag
+          </div>
+        </div>
+        <button onClick={apply} className="text-xs uppercase tracking-wider px-6 py-3 rounded-full font-medium" style={{ background: draft.accent, color: "#0a0908" }}>
+          Apply to Storefront
+        </button>
+        <p className="text-[10px] text-[#5a4a38]">Changes apply instantly across the storefront header and accents for this session.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- AI Assistant Chatbot ---------------- */
+
+function answerAssistant(message, catalog) {
+  const m = message.toLowerCase();
+  if (/(track|order status|where is my order|delivery)/.test(m)) {
+    return "I can help with that — once your order is placed, you'll get an order ID like AW-1000. You can check its live status under Account → Orders, or just tell me the order ID here.";
+  }
+  if (/(return|refund|exchange)/.test(m)) {
+    return "We offer free returns within 30 days on unopened bottles. I can start that for you — just share your order ID and I'll flag it for our team.";
+  }
+  if (/(gift|present)/.test(m)) {
+    return "For a gift, I'd lean toward something warm and memorable — Ambre Royale or Velours d'Or are our most-gifted scents. Want me to suggest one based on who it's for?";
+  }
+  if (/(shipping|deliver)/.test(m)) {
+    return "We ship worldwide. Orders over $250 ship free, otherwise it's a flat $18, arriving in 3–7 business days depending on destination.";
+  }
+  if (/(ingredient|allergen|vegan|cruelty)/.test(m)) {
+    return "All A_W fragrances are cruelty-free and we publish full ingredient lists on each product page under 'Fragrance Notes'. Let me know a specific bottle and I'll pull the details.";
+  }
+  const found = catalog.find((p) => m.includes(p.name.toLowerCase()));
+  if (found) {
+    return `${found.name} is ${found.profile.mood.toLowerCase()} and built around ${found.profile.top[0]} up top with a ${found.profile.base[0]} base — best suited for ${found.profile.occasion.toLowerCase()}. It's $${found.price} for ${found.sizeMl}ml. Want me to add it to your bag?`;
+  }
+  return "I'm here to help with sizing, notes, shipping, or finding your next signature scent. Try the 'Suggest Me a Perfume' tool below, or ask me about a specific fragrance.";
+}
+
+function AIAssistant({ open, onToggle }) {
+  const { catalog, addToCart } = useStore();
+  const [messages, setMessages] = useState([
+    { role: "bot", text: "Bonsoir — I'm Aria, your A_W fragrance concierge. Ask me about a scent, shipping, or returns." },
+  ]);
+  const [input, setInput] = useState("");
+  const endRef = useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open]);
+
+  function send() {
+    if (!input.trim()) return;
+    const userMsg = input.trim();
+    setMessages((m) => [...m, { role: "user", text: userMsg }]);
+    setInput("");
+    setTimeout(() => {
+      setMessages((m) => [...m, { role: "bot", text: answerAssistant(userMsg, catalog) }]);
+    }, 500);
+  }
+
+  return (
+    <>
+      <button
+        onClick={onToggle}
+        className="fixed bottom-5 right-5 z-[60] w-14 h-14 rounded-full bg-[#d4af6a] text-[#0a0908] shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
+        aria-label="Open AI assistant"
+      >
+        {open ? <X size={22} /> : <Bot size={22} />}
+      </button>
+      <div className={`fixed bottom-24 right-5 z-[60] w-[90vw] sm:w-96 bg-[#100d0a] border border-[#2a2218] rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right ${open ? "scale-100 opacity-100" : "scale-90 opacity-0 pointer-events-none"}`} style={{ height: "min(520px, 70vh)" }}>
+        <div className="flex items-center gap-2 p-4 border-b border-[#2a2218]">
+          <div className="w-8 h-8 rounded-full bg-[#1a1612] flex items-center justify-center"><Sparkles size={14} className="text-[#d4af6a]" /></div>
+          <div>
+            <p className="text-sm text-[#f5f0e8] font-medium">Aria — AI Concierge</p>
+            <p className="text-[10px] text-[#8b7355]">Usually replies instantly</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[80%] text-sm rounded-2xl px-4 py-2.5 ${m.role === "user" ? "bg-[#d4af6a] text-[#0a0908]" : "bg-[#1a1612] text-[#e8e1d3] border border-[#2a2218]"}`}>
+                {m.text}
+              </div>
+            </div>
+          ))}
+          <div ref={endRef} />
+        </div>
+        <div className="p-3 border-t border-[#2a2218] flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder="Ask Aria anything..."
+            className="flex-1 bg-[#0c0a08] border border-[#2a2218] rounded-full px-4 py-2 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+          <button onClick={send} className="w-9 h-9 rounded-full bg-[#d4af6a] text-[#0a0908] flex items-center justify-center flex-shrink-0"><Send size={14} /></button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ---------------- AI Perfume Suggestor (signature element) ---------------- */
+
+function ScentProfiler({ onResult }) {
+  const { catalog } = useStore();
+  const [mood, setMood] = useState(null);
+  const [gender, setGender] = useState(null);
+  const [occasion, setOccasion] = useState(null);
+  const [result, setResult] = useState(null);
+
+  function compute() {
+    let best = catalog[0];
+    let bestScore = -1;
+    catalog.forEach((p) => {
+      let score = 0;
+      if (mood && p.profile.mood === mood) score += 3;
+      if (gender && (p.profile.gender === gender || p.profile.gender === "Unisex")) score += 2;
+      if (occasion && p.profile.occasion === occasion) score += 3;
+      if (score > bestScore) { bestScore = score; best = p; }
+    });
+    setResult(best);
+    onResult?.(best);
+  }
+
+  return (
+    <div className="bg-gradient-to-br from-[#15120e] to-[#0c0a08] border border-[#2a2218] rounded-2xl p-6 md:p-8">
+      <div className="flex items-center gap-2 mb-1">
+        <Wand2 size={16} className="text-[#d4af6a]" />
+        <Eyebrow>AI Scent Profiler</Eyebrow>
+      </div>
+      <h3 className="font-serif text-2xl text-[#f5f0e8] mb-5">Find Your Signature Scent</h3>
+
+      <div className="space-y-4">
+        <ChipRow label="Mood" options={MOODS} value={mood} onChange={setMood} />
+        <ChipRow label="For" options={GENDERS} value={gender} onChange={setGender} />
+        <ChipRow label="Occasion" options={OCCASIONS} value={occasion} onChange={setOccasion} />
+      </div>
+
+      <button
+        onClick={compute}
+        disabled={!mood && !gender && !occasion}
+        className="mt-6 w-full sm:w-auto px-7 bg-[#d4af6a] disabled:opacity-40 text-[#0a0908] text-xs uppercase tracking-wider py-3 rounded-full font-medium"
+      >
+        Reveal My Match
+      </button>
+
+      {result && (
+        <div className="mt-7 pt-6 border-t border-[#2a2218] flex flex-col sm:flex-row gap-5 items-center sm:items-start">
+          <div className="w-20 h-28 flex-shrink-0 flex items-center justify-center bg-[#0c0a08] rounded-lg border border-[#2a2218]">
+            <BottleArt art={result.art} size="small" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[10px] uppercase tracking-wider text-[#8b7355]">Your match</p>
+            <p className="font-serif text-xl text-[#f5f0e8]">{result.name}</p>
+            <p className="text-sm text-[#cbbfa8] mt-1 leading-relaxed">{result.description}</p>
+            <ScentDNA profile={result.profile} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChipRow({ label, options, value, onChange }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-2">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button
+            key={o}
+            onClick={() => onChange(value === o ? null : o)}
+            className={`text-xs px-3.5 py-1.5 rounded-full border transition-colors ${value === o ? "border-[#d4af6a] bg-[#d4af6a] text-[#0a0908]" : "border-[#2a2218] text-[#cbbfa8] hover:border-[#d4af6a]/50"}`}
+          >
+            {o}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScentDNA({ profile }) {
+  const segs = [
+    { label: "Top", pct: 33, color: "#e8c688" },
+    { label: "Heart", pct: 34, color: "#d4af6a" },
+    { label: "Base", pct: 33, color: "#8b6b3f" },
+  ];
+  return (
+    <div className="mt-3">
+      <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-1.5">Scent DNA</p>
+      <div className="flex h-2 rounded-full overflow-hidden">
+        {segs.map((s) => <div key={s.label} style={{ width: `${s.pct}%`, background: s.color }} />)}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Smart Recommendations ---------------- */
+
+function SmartRecommendations({ onOpen }) {
+  const { catalog, viewHistory, wishlist } = useStore();
+  const recs = useMemo(() => {
+    const seedIds = [...viewHistory, ...wishlist];
+    if (seedIds.length === 0) return catalog.filter((p) => p.featured).slice(0, 4);
+    const moods = new Set(seedIds.map((id) => catalog.find((p) => p.id === id)?.profile.mood).filter(Boolean));
+    const ranked = catalog
+      .filter((p) => !seedIds.includes(p.id))
+      .map((p) => ({ p, score: moods.has(p.profile.mood) ? 1 : 0 }))
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.p);
+    return ranked.slice(0, 4);
+  }, [catalog, viewHistory, wishlist]);
+
+  return (
+    <section className="px-6 md:px-12 py-16 border-t border-[#1a1612]">
+      <div className="flex items-center gap-2 mb-1">
+        <TrendingUp size={15} className="text-[#d4af6a]" />
+        <Eyebrow>{viewHistory.length ? "Curated For You" : "Editor's Picks"}</Eyebrow>
+      </div>
+      <h2 className="font-serif text-3xl text-[#f5f0e8] mb-8">{viewHistory.length ? "Because You Browsed These Notes" : "Where to Begin"}</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+        {recs.map((p) => <ProductCard key={p.id} product={p} onOpen={onOpen} />)}
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- Storefront pages ---------------- */
+
+function Header({ cartCount, onCartOpen, onNav, page, onAuthOpen }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { theme, currentUser, logout } = useStore();
+  return (
+    <header className="sticky top-0 z-50 bg-[#0a0908]/95 backdrop-blur-md border-b border-[#1a1612]">
+      <div className="px-6 md:px-12 h-20 flex items-center justify-between">
+        <button onClick={() => onNav("home")} className="font-serif text-2xl tracking-[0.15em] text-[#f5f0e8]">
+          {theme.storeName} <span style={{ color: theme.accent }}>{theme.tagline}</span>
+        </button>
+        <nav className="hidden md:flex items-center gap-9 text-[11px] tracking-[0.15em] uppercase text-[#cbbfa8]">
+          <button onClick={() => onNav("home")} className={page === "home" ? "text-[#d4af6a]" : "hover:text-[#d4af6a]"}>Home</button>
+          <button onClick={() => onNav("shop")} className={page === "shop" ? "text-[#d4af6a]" : "hover:text-[#d4af6a]"}>Collection</button>
+          <button onClick={() => onNav("profiler")} className={page === "profiler" ? "text-[#d4af6a]" : "hover:text-[#d4af6a]"}>AI Profiler</button>
+          <button onClick={() => onNav("blog")} className={page === "blog" ? "text-[#d4af6a]" : "hover:text-[#d4af6a]"}>Journal</button>
+          <button onClick={() => onNav("account")} className={page === "account" ? "text-[#d4af6a]" : "hover:text-[#d4af6a]"}>Account</button>
+          <button onClick={() => onNav("admin")} className={page === "admin" ? "text-[#d4af6a]" : "hover:text-[#d4af6a]"}>Admin</button>
+        </nav>
+        <div className="flex items-center gap-4">
+          {currentUser ? (
+            <div className="hidden sm:flex items-center gap-2 text-xs text-[#cbbfa8]">
+              <button onClick={() => onNav("account")} className="flex items-center gap-1.5 hover:text-[#d4af6a]">
+                <User size={15} className="text-[#d4af6a]" />
+                <span>{currentUser.name.split(" ")[0]}</span>
+              </button>
+              <button onClick={logout} className="text-[#8b7355] hover:text-[#d4af6a]" title="Log out"><LogOut size={14} /></button>
+            </div>
+          ) : (
+            <button onClick={onAuthOpen} className="hidden sm:flex items-center gap-1.5 text-xs uppercase tracking-wider text-[#cbbfa8] hover:text-[#d4af6a]">
+              <Lock size={13} /> Sign in
+            </button>
+          )}
+          <button onClick={onCartOpen} className="relative text-[#cbbfa8] hover:text-[#d4af6a]">
+            <ShoppingBag size={20} />
+            {cartCount > 0 && <span className="absolute -top-2 -right-2 bg-[#d4af6a] text-[#0a0908] text-[10px] w-4 h-4 rounded-full flex items-center justify-center">{cartCount}</span>}
+          </button>
+          <button className="md:hidden text-[#cbbfa8]" onClick={() => setMenuOpen((o) => !o)}><Menu size={22} /></button>
+        </div>
+      </div>
+      {menuOpen && (
+        <div className="md:hidden px-6 pb-5 flex flex-col gap-3 text-sm text-[#cbbfa8] uppercase tracking-wider">
+          {["home", "shop", "profiler", "blog", "account", "admin"].map((p) => (
+            <button key={p} onClick={() => { onNav(p); setMenuOpen(false); }} className="text-left py-1">{p}</button>
+          ))}
+          {currentUser ? (
+            <button onClick={logout} className="text-left py-1 text-[#d4af6a]">Log out ({currentUser.name.split(" ")[0]})</button>
+          ) : (
+            <button onClick={() => { onAuthOpen(); setMenuOpen(false); }} className="text-left py-1 text-[#d4af6a]">Sign in</button>
+          )}
+        </div>
+      )}
+    </header>
+  );
+}
+
+function Hero({ onShop }) {
+  return (
+    <section className="relative px-6 md:px-12 pt-16 md:pt-24 pb-20 overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(212,175,106,0.08),transparent_60%)]" />
+      <div className="relative grid md:grid-cols-2 gap-10 items-center max-w-6xl mx-auto">
+        <div>
+          <Eyebrow>Crafted by AI. Perfected by artisans.</Eyebrow>
+          <h1 className="font-serif text-5xl md:text-6xl leading-[1.05] text-[#f5f0e8]">
+            The scent of <span className="text-[#d4af6a] italic">presence</span>, not introduction.
+          </h1>
+          <p className="text-[#cbbfa8] mt-6 max-w-md leading-relaxed">
+            A_W Perfume pairs rare ingredients with an AI fragrance studio — generating new compositions, descriptions, and personalized matches faster than any house in the world.
+          </p>
+          <div className="flex gap-4 mt-8">
+            <button onClick={onShop} className="bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider px-7 py-3.5 rounded-full font-medium hover:bg-[#e8c688] transition-colors">
+              Explore the Collection
+            </button>
+          </div>
+          <div className="flex gap-8 mt-12 text-[#8b7355]">
+            <div><p className="font-serif text-2xl text-[#f5f0e8]">12</p><p className="text-[10px] uppercase tracking-wider">Signature Scents</p></div>
+            <div><p className="font-serif text-2xl text-[#f5f0e8]">40+</p><p className="text-[10px] uppercase tracking-wider">Countries Shipped</p></div>
+            <div><p className="font-serif text-2xl text-[#f5f0e8]">4.7</p><p className="text-[10px] uppercase tracking-wider">Avg. Rating</p></div>
+          </div>
+        </div>
+        <div className="relative h-80 md:h-[420px] flex items-center justify-center">
+          <div className="absolute w-64 h-64 rounded-full bg-[#d4af6a]/10 blur-3xl" />
+          <div className="flex gap-4 items-end">
+            <div className="opacity-60 translate-y-4"><BottleArt art={["#16110d", "#4a3826", "#e8c688"]} size="normal" /></div>
+            <div className="scale-110"><BottleArt art={["#1a1612", "#3d2f1f", "#d4af6a"]} size="large" /></div>
+            <div className="opacity-60 translate-y-4"><BottleArt art={["#120f0c", "#352618", "#caa86a"]} size="normal" /></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HomePage({ onOpen, onNav }) {
+  const { catalog } = useStore();
+  const featured = catalog.filter((p) => p.featured);
+  return (
+    <>
+      <Hero onShop={() => onNav("shop")} />
+      <section className="px-6 md:px-12 py-16">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <Eyebrow>The Edit</Eyebrow>
+            <h2 className="font-serif text-3xl text-[#f5f0e8]">Featured Compositions</h2>
+          </div>
+          <button onClick={() => onNav("shop")} className="hidden sm:flex items-center gap-1 text-xs uppercase tracking-wider text-[#d4af6a]">
+            View all <ArrowRight size={13} />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+          {featured.map((p) => <ProductCard key={p.id} product={p} onOpen={onOpen} />)}
+        </div>
+      </section>
+
+      <section className="px-6 md:px-12 py-16 border-t border-[#1a1612]">
+        <ScentProfiler />
+      </section>
+
+      <SmartRecommendations onOpen={onOpen} />
+    </>
+  );
+}
+
+function ShopPage({ onOpen }) {
+  const { catalog } = useStore();
+  const [query, setQuery] = useState("");
+  const [genderFilter, setGenderFilter] = useState("All");
+  const [sort, setSort] = useState("featured");
+
+  let items = catalog.filter((p) =>
+    p.name.toLowerCase().includes(query.toLowerCase()) &&
+    (genderFilter === "All" || p.profile.gender === genderFilter)
+  );
+  if (sort === "price-asc") items = [...items].sort((a, b) => a.price - b.price);
+  if (sort === "price-desc") items = [...items].sort((a, b) => b.price - a.price);
+  if (sort === "rating") items = [...items].sort((a, b) => b.rating - a.rating);
+
+  return (
+    <section className="px-6 md:px-12 py-12 max-w-7xl mx-auto">
+      <Eyebrow>Full Collection</Eyebrow>
+      <h1 className="font-serif text-4xl text-[#f5f0e8] mb-8">Every Composition</h1>
+
+      <div className="flex flex-wrap gap-3 mb-10 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a4a38]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search fragrances..."
+            className="w-full bg-[#100d0a] border border-[#2a2218] rounded-full pl-10 pr-4 py-2.5 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+          />
+        </div>
+        <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} className="bg-[#100d0a] border border-[#2a2218] rounded-full px-4 py-2.5 text-sm text-[#cbbfa8] focus:outline-none">
+          {["All", ...GENDERS].map((g) => <option key={g}>{g}</option>)}
+        </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="bg-[#100d0a] border border-[#2a2218] rounded-full px-4 py-2.5 text-sm text-[#cbbfa8] focus:outline-none">
+          <option value="featured">Featured</option>
+          <option value="price-asc">Price: Low to High</option>
+          <option value="price-desc">Price: High to Low</option>
+          <option value="rating">Top Rated</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+        {items.map((p) => <ProductCard key={p.id} product={p} onOpen={onOpen} />)}
+      </div>
+      {items.length === 0 && <p className="text-[#8b7355] text-sm text-center py-20">No fragrances match your search.</p>}
+    </section>
+  );
+}
+
+function ProfilerPage({ onOpen }) {
+  const [result, setResult] = useState(null);
+  return (
+    <section className="px-6 md:px-12 py-12 max-w-3xl mx-auto">
+      <Eyebrow>AI Personalization</Eyebrow>
+      <h1 className="font-serif text-4xl text-[#f5f0e8] mb-8">Suggest Me a Perfume</h1>
+      <ScentProfiler onResult={setResult} />
+      {result && (
+        <button onClick={() => onOpen(result)} className="mt-6 text-xs uppercase tracking-wider text-[#d4af6a] flex items-center gap-1">
+          View full details <ChevronRight size={14} />
+        </button>
+      )}
+    </section>
+  );
+}
+
+/* ---------------- My Account Page ---------------- */
+
+function AccountPage({ onAuthOpen }) {
+  const { currentUser, orders, logout } = useStore();
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+
+  if (!currentUser) {
+    return (
+      <section className="px-6 md:px-12 py-20 max-w-md mx-auto text-center">
+        <Lock size={28} className="text-[#d4af6a] mx-auto mb-4" />
+        <h1 className="font-serif text-3xl text-[#f5f0e8] mb-2">Sign In Required</h1>
+        <p className="text-sm text-[#8b7355] mb-6">Create an account or log in to view your orders and profile.</p>
+        <button onClick={onAuthOpen} className="bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider px-7 py-3 rounded-full font-medium">
+          Sign In
+        </button>
+      </section>
+    );
+  }
+
+  const myOrders = orders.filter((o) => o.customer.email?.toLowerCase() === currentUser.email.toLowerCase());
+
+  return (
+    <section className="px-6 md:px-12 py-12 max-w-3xl mx-auto">
+      <Eyebrow>My Account</Eyebrow>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="font-serif text-4xl text-[#f5f0e8]">{currentUser.name}</h1>
+          <p className="text-sm text-[#8b7355]">{currentUser.email}</p>
+        </div>
+        <button onClick={logout} className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-[#8b7355] hover:text-[#d4af6a] border border-[#2a2218] px-4 py-2 rounded-full">
+          <LogOut size={13} /> Log out
+        </button>
+      </div>
+
+      <h2 className="font-serif text-xl text-[#f5f0e8] mb-4">Order History</h2>
+      {myOrders.length === 0 ? (
+        <p className="text-sm text-[#8b7355]">No orders yet — your purchases will appear here.</p>
+      ) : (
+        <div className="space-y-3">
+          {myOrders.map((o) => (
+            <div key={o.id} className="border border-[#1a1612] rounded-xl bg-[#0c0a08] p-4 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-sm text-[#f5f0e8]">{o.id}</p>
+                <p className="text-[10px] text-[#8b7355]">{new Date(o.date).toLocaleDateString()} · {o.items.length} item(s)</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#1a1612] text-[#cbbfa8]">{o.status}</span>
+                <span className="text-sm text-[#d4af6a]">${o.totals.total.toFixed(2)}</span>
+                <button onClick={() => setInvoiceOrder(o)} className="text-[10px] uppercase tracking-wider text-[#d4af6a] flex items-center gap-1">
+                  <FileText size={11} /> Invoice
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <Invoice order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
+    </section>
+  );
+}
+
+/* ---------------- Admin Dashboard ---------------- */
+
+const STATUS_FLOW = ["Processing", "Packed", "Shipped", "Delivered"];
+const STATUS_ICON = { Processing: Clock, Packed: Package, Shipped: Truck, Delivered: CheckCircle2 };
+
+function AdminDashboard() {
+  const { orders, catalog, advanceOrderStatus, updateStock, regenerateProduct, aiGenerating, aiError, addProduct, newProductGenerating, newProductError, adminLogout } = useStore();
+  const [tab, setTab] = useState("overview");
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+  const [newName, setNewName] = useState("");
+  const [newPrice, setNewPrice] = useState("250");
+  const [newSize, setNewSize] = useState("50");
+
+  const revenue = orders.reduce((s, o) => s + o.totals.total, 0);
+  const lowStock = catalog.filter((p) => p.stock < 10);
+
+  return (
+    <div className="px-6 md:px-12 py-10 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <LayoutDashboard size={16} className="text-[#d4af6a]" />
+            <Eyebrow>Admin Panel</Eyebrow>
+          </div>
+          <h1 className="font-serif text-4xl text-[#f5f0e8] mb-8">Operations Dashboard</h1>
+        </div>
+        <button onClick={adminLogout} className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-[#8b7355] hover:text-[#d4af6a] border border-[#2a2218] px-4 py-2 rounded-full">
+          <LogOut size={13} /> Log out
+        </button>
+      </div>
+
+      <div className="flex gap-2 mb-8 border-b border-[#1a1612] overflow-x-auto">
+        {[
+          ["overview", "Overview", BarChart3],
+          ["orders", "Orders", Receipt],
+          ["inventory", "Inventory", Boxes],
+          ["catalog", "AI Catalog Tools", Wand2],
+          ["customize", "Customize", Palette],
+        ].map(([id, label, Icon]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider whitespace-nowrap border-b-2 ${tab === id ? "border-[#d4af6a] text-[#d4af6a]" : "border-transparent text-[#8b7355]"}`}
+          >
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <StatCard label="Total Revenue" value={`$${revenue.toFixed(2)}`} icon={TrendingUp} />
+          <StatCard label="Orders" value={orders.length} icon={Receipt} />
+          <StatCard label="Avg. Order Value" value={`$${orders.length ? (revenue / orders.length).toFixed(2) : "0.00"}`} icon={BarChart3} />
+          <StatCard label="Low Stock Alerts" value={lowStock.length} icon={AlertCircle} warn={lowStock.length > 0} />
+
+          <div className="sm:col-span-2 lg:col-span-4 bg-[#100d0a] border border-[#1a1612] rounded-xl p-6 mt-2">
+            <h3 className="font-serif text-lg text-[#f5f0e8] mb-4">Recent Orders</h3>
+            {orders.length === 0 ? (
+              <p className="text-sm text-[#8b7355]">No orders yet — orders placed on the storefront will appear here instantly.</p>
+            ) : (
+              <div className="space-y-3">
+                {orders.slice(0, 5).map((o) => <OrderRow key={o.id} order={o} onAdvance={advanceOrderStatus} onInvoice={setInvoiceOrder} />)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "orders" && (
+        <div className="space-y-3">
+          {orders.length === 0 && <p className="text-sm text-[#8b7355]">No orders yet.</p>}
+          {orders.map((o) => <OrderRow key={o.id} order={o} onAdvance={advanceOrderStatus} onInvoice={setInvoiceOrder} expanded />)}
+        </div>
+      )}
+
+      {tab === "inventory" && (
+        <div className="bg-[#100d0a] border border-[#1a1612] rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[#15120e] text-[#8b7355] text-[10px] uppercase tracking-wider">
+              <tr>
+                <th className="text-left p-4">Product</th>
+                <th className="text-left p-4">Size</th>
+                <th className="text-left p-4">Price</th>
+                <th className="text-left p-4">Stock</th>
+                <th className="text-left p-4">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {catalog.map((p) => (
+                <tr key={p.id} className="border-t border-[#1a1612]">
+                  <td className="p-4 text-[#f5f0e8]">{p.name}</td>
+                  <td className="p-4 text-[#cbbfa8]">{p.sizeMl}ml</td>
+                  <td className="p-4 text-[#cbbfa8]">${p.price}</td>
+                  <td className="p-4">
+                    <span className={p.stock < 10 ? "text-[#e07a5f]" : "text-[#cbbfa8]"}>{p.stock} units</span>
+                  </td>
+                  <td className="p-4 flex gap-2">
+                    <button onClick={() => updateStock(p.id, p.stock + 20)} className="text-[10px] uppercase tracking-wider border border-[#2a2218] text-[#d4af6a] px-3 py-1.5 rounded-full">Restock +20</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "catalog" && (
+        <div>
+          <p className="text-sm text-[#8b7355] mb-6 max-w-2xl">
+            This now calls Claude live to write fresh descriptions and SEO metadata for any product —
+            click "Regenerate" and the new copy is genuinely AI-generated, not templated.
+          </p>
+
+          <div className="bg-gradient-to-br from-[#15120e] to-[#0c0a08] border border-[#2a2218] rounded-xl p-5 mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles size={14} className="text-[#d4af6a]" />
+              <p className="text-[10px] uppercase tracking-wider text-[#8b7355]">AI Product Builder</p>
+            </div>
+            <p className="text-sm text-[#cbbfa8] mb-4">Type a name, set a price and size — Claude writes the full description and SEO for you.</p>
+            <div className="grid sm:grid-cols-4 gap-3">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Fragrance name, e.g. Soir de Velours"
+                className="sm:col-span-2 bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-2.5 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+              />
+              <input
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                placeholder="Price ($)"
+                type="number"
+                className="bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-2.5 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+              />
+              <select value={newSize} onChange={(e) => setNewSize(e.target.value)} className="bg-[#0c0a08] border border-[#2a2218] rounded-lg px-4 py-2.5 text-sm text-[#cbbfa8] focus:outline-none">
+                <option value="50">50ml</option>
+                <option value="100">100ml</option>
+              </select>
+            </div>
+            <button
+              onClick={async () => {
+                if (!newName.trim()) return;
+                await addProduct({ name: newName.trim(), price: newPrice, sizeMl: newSize });
+                setNewName("");
+              }}
+              disabled={!newName.trim() || newProductGenerating}
+              className="mt-4 flex items-center gap-2 text-xs uppercase tracking-wider bg-[#d4af6a] disabled:opacity-40 text-[#0a0908] px-5 py-2.5 rounded-full font-medium"
+            >
+              <Wand2 size={13} className={newProductGenerating ? "animate-spin" : ""} />
+              {newProductGenerating ? "Generating..." : "Create with AI"}
+            </button>
+            {newProductError && <p className="text-[10px] text-[#e07a5f] mt-2 flex items-center gap-1"><AlertCircle size={11} /> {newProductError}</p>}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-5">
+            {catalog.map((p) => {
+              const isGenerating = aiGenerating[p.id];
+              const error = aiError[p.id];
+              return (
+                <div key={p.id} className="bg-[#100d0a] border border-[#1a1612] rounded-xl p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-serif text-lg text-[#f5f0e8]">{p.name}</p>
+                      <p className="text-xs text-[#8b7355] mt-1">{p.seo.title}</p>
+                    </div>
+                    <button
+                      onClick={() => regenerateProduct(p.id)}
+                      disabled={isGenerating}
+                      className="text-[10px] uppercase tracking-wider border border-[#d4af6a]/50 text-[#d4af6a] px-3 py-1.5 rounded-full flex items-center gap-1 flex-shrink-0 disabled:opacity-50"
+                    >
+                      <Wand2 size={11} className={isGenerating ? "animate-spin" : ""} />
+                      {isGenerating ? "Writing..." : "Regenerate"}
+                    </button>
+                  </div>
+                  <p className="text-sm text-[#cbbfa8] mt-3 leading-relaxed line-clamp-3">{p.description}</p>
+                  {error && (
+                    <p className="text-[10px] text-[#e07a5f] mt-2 flex items-center gap-1">
+                      <AlertCircle size={11} /> {error}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {p.seo.keywords.slice(0, 3).map((k) => <span key={k} className="text-[10px] bg-[#1a1612] text-[#8b7355] px-2 py-1 rounded-full">{k}</span>)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {tab === "customize" && <CustomizePanel />}
+
+      <Invoice order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, warn }) {
+  return (
+    <div className="bg-[#100d0a] border border-[#1a1612] rounded-xl p-5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] uppercase tracking-wider text-[#8b7355]">{label}</p>
+        <Icon size={15} className={warn ? "text-[#e07a5f]" : "text-[#d4af6a]"} />
+      </div>
+      <p className="font-serif text-2xl text-[#f5f0e8]">{value}</p>
+    </div>
+  );
+}
+
+function OrderRow({ order, onAdvance, onInvoice, expanded }) {
+  const [open, setOpen] = useState(false);
+  const currentIdx = STATUS_FLOW.indexOf(order.status);
+  const Icon = STATUS_ICON[order.status];
+  return (
+    <div className="border border-[#1a1612] rounded-xl bg-[#0c0a08]">
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between p-4 text-left">
+        <div className="flex items-center gap-3">
+          <Icon size={16} className="text-[#d4af6a]" />
+          <div>
+            <p className="text-sm text-[#f5f0e8]">{order.id} <span className="text-[#8b7355]">· {order.customer.name || "Guest"}</span></p>
+            <p className="text-[10px] text-[#8b7355]">{new Date(order.date).toLocaleString()}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-[#d4af6a]">${order.totals.total.toFixed(2)}</span>
+          <span className="text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#1a1612] text-[#cbbfa8]">{order.status}</span>
+        </div>
+      </button>
+      {(open || expanded) && (
+        <div className="px-4 pb-4 space-y-3">
+          <div className="text-xs text-[#8b7355]">
+            {order.items.map((it) => (
+              <div key={it.id} className="flex justify-between py-1">
+                <span>{it.name} × {it.qty}</span><span>${(it.price * it.qty).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {STATUS_FLOW.map((s, i) => (
+              <button
+                key={s}
+                onClick={() => onAdvance(order.id, s)}
+                disabled={i < currentIdx}
+                className={`text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full border ${i === currentIdx ? "border-[#d4af6a] bg-[#d4af6a] text-[#0a0908]" : i < currentIdx ? "border-[#2a2218] text-[#5a4a38]" : "border-[#2a2218] text-[#cbbfa8]"}`}
+              >
+                {s}
+              </button>
+            ))}
+            <button onClick={() => onInvoice(order)} className="text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full border border-[#2a2218] text-[#d4af6a] flex items-center gap-1 ml-auto">
+              <FileText size={11} /> Invoice
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Order Confirmation ---------------- */
+
+function OrderConfirmation({ order, onClose, onTrack }) {
+  if (!order) return null;
+
+  const WA_NUMBER = "923258467107";
+  const waMessage = encodeURIComponent(
+    `Assalam o Alaikum! Mera order track karna chahta hoon.\n\nOrder ID: ${order.id}\nNaam: ${order.customer.name}\nTotal: $${order.totals.total.toFixed(2)}\n\nKindly status update karein. Shukriya! 🙏`
+  );
+  const waLink = `https://wa.me/${WA_NUMBER}?text=${waMessage}`;
+
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-[#100d0a] border border-[#2a2218] rounded-2xl w-full max-w-md p-8 text-center">
+        <div className="w-14 h-14 mx-auto rounded-full bg-[#d4af6a]/15 flex items-center justify-center mb-4">
+          <CheckCircle2 size={26} className="text-[#d4af6a]" />
+        </div>
+        <h3 className="font-serif text-2xl text-[#f5f0e8]">Order Confirmed</h3>
+        <p className="text-[#cbbfa8] text-sm mt-2">Order <span className="text-[#d4af6a]">{order.id}</span> has been placed and sent to our dispatch team.</p>
+        <p className="text-[#8b7355] text-xs mt-1">A confirmation and invoice were generated automatically.</p>
+
+        {/* WhatsApp Track Button */}
+        <a
+          href={waLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-6 w-full flex items-center justify-center gap-2.5 bg-[#25D366] text-white text-xs uppercase tracking-wider py-3.5 rounded-full font-medium hover:bg-[#1ebe5d] transition-colors"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+          WhatsApp Pe Track Karo
+        </a>
+
+        <div className="flex gap-3 mt-3">
+          <button onClick={onTrack} className="flex-1 border border-[#2a2218] text-[#cbbfa8] text-xs uppercase tracking-wider py-3 rounded-full">Admin Track</button>
+          <button onClick={onClose} className="flex-1 bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider py-3 rounded-full font-medium">Continue Shopping</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Product Reviews Component ---------------- */
+
+function ReviewsSection({ productId }) {
+  const { reviews, addReview, currentUser } = useStore();
+  const productReviews = reviews[productId] || [];
+  const [form, setForm] = useState({ rating: 5, comment: "" });
+  const [submitted, setSubmitted] = useState(false);
+
+  function handleSubmit() {
+    if (!form.comment.trim()) return;
+    addReview(productId, {
+      name: currentUser?.name || "Anonymous",
+      rating: form.rating,
+      comment: form.comment,
+    });
+    setForm({ rating: 5, comment: "" });
+    setSubmitted(true);
+    setTimeout(() => setSubmitted(false), 2000);
+  }
+
+  return (
+    <div className="mt-6 pt-5 border-t border-[#2a2218]">
+      <p className="text-[10px] uppercase tracking-wider text-[#8b7355] mb-3">Customer Reviews ({productReviews.length})</p>
+
+      {/* Write a review */}
+      <div className="bg-[#0c0a08] border border-[#2a2218] rounded-lg p-4 mb-4">
+        <p className="text-xs text-[#cbbfa8] mb-2">Write a Review</p>
+        <div className="flex gap-1 mb-2">
+          {[1,2,3,4,5].map((s) => (
+            <button key={s} onClick={() => setForm((f) => ({ ...f, rating: s }))}>
+              <Star size={16} className={s <= form.rating ? "fill-[#d4af6a] text-[#d4af6a]" : "text-[#2a2218]"} />
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={form.comment}
+          onChange={(e) => setForm((f) => ({ ...f, comment: e.target.value }))}
+          placeholder="Share your experience..."
+          rows={2}
+          className="w-full bg-transparent border border-[#2a2218] rounded-lg px-3 py-2 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60 resize-none"
+        />
+        <button
+          onClick={handleSubmit}
+          className="mt-2 text-[10px] uppercase tracking-wider bg-[#d4af6a] text-[#0a0908] px-4 py-1.5 rounded-full font-medium"
+        >
+          {submitted ? "Posted ✓" : "Post Review"}
+        </button>
+      </div>
+
+      {/* Existing reviews */}
+      <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+        {productReviews.length === 0 ? (
+          <p className="text-xs text-[#5a4a38]">No reviews yet — be the first!</p>
+        ) : productReviews.map((r, i) => (
+          <div key={i} className="border-b border-[#1a1612] pb-3">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-[#1a1612] flex items-center justify-center text-[10px] text-[#d4af6a]">{r.name[0]}</div>
+                <span className="text-xs text-[#cbbfa8]">{r.name}</span>
+              </div>
+              <div className="flex gap-0.5">
+                {[1,2,3,4,5].map((s) => <Star key={s} size={10} className={s <= r.rating ? "fill-[#d4af6a] text-[#d4af6a]" : "text-[#2a2218]"} />)}
+              </div>
+            </div>
+            <p className="text-xs text-[#8b7355] leading-relaxed">{r.comment}</p>
+            <p className="text-[10px] text-[#5a4a38] mt-1">{new Date(r.date).toLocaleDateString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Blog Page ---------------- */
+
+function BlogPage() {
+  const { blogPosts } = useStore();
+  const [active, setActive] = useState(null);
+
+  if (active) {
+    const post = blogPosts.find((p) => p.id === active);
+    return (
+      <section className="px-6 md:px-12 py-12 max-w-2xl mx-auto">
+        <button onClick={() => setActive(null)} className="flex items-center gap-1 text-xs text-[#8b7355] uppercase tracking-wider mb-8 hover:text-[#d4af6a]">
+          <ChevronLeft size={14} /> Back to Blog
+        </button>
+        <span className="text-[10px] uppercase tracking-wider bg-[#1a1612] text-[#d4af6a] px-3 py-1 rounded-full">{post.tag}</span>
+        <h1 className="font-serif text-4xl text-[#f5f0e8] mt-4 mb-2 leading-tight">{post.title}</h1>
+        <p className="text-xs text-[#8b7355] mb-8">{new Date(post.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} · {post.readTime}</p>
+        <GoldDivider className="mb-8" />
+        <p className="text-[#cbbfa8] leading-relaxed">{post.excerpt}</p>
+        <p className="text-[#cbbfa8] leading-relaxed mt-4">
+          At A_W Tech & Style, every launch is a deliberate act. We don't release fragrances on trend cycles — we release them when we believe the composition is truly ready, and not a moment before. This ethos shapes everything from our sourcing to our packaging, and it's what makes each new announcement worth waiting for.
+        </p>
+        <p className="text-[#cbbfa8] leading-relaxed mt-4">
+          Follow us on Instagram, TikTok, and Facebook at <span className="text-[#d4af6a]">@aw_tech_style</span> to be the first to know about upcoming drops, exclusive offers, and behind-the-scenes content.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="px-6 md:px-12 py-12 max-w-5xl mx-auto">
+      <Eyebrow>Journal</Eyebrow>
+      <h1 className="font-serif text-4xl text-[#f5f0e8] mb-10">Launches & Announcements</h1>
+      <div className="grid md:grid-cols-2 gap-7">
+        {blogPosts.map((post) => (
+          <button
+            key={post.id}
+            onClick={() => setActive(post.id)}
+            className="group text-left bg-[#100d0a] border border-[#1a1612] rounded-2xl p-6 hover:border-[#d4af6a]/40 transition-colors"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] uppercase tracking-wider bg-[#1a1612] border border-[#2a2218] text-[#d4af6a] px-3 py-1 rounded-full">{post.tag}</span>
+              <span className="text-[10px] text-[#5a4a38]">{post.readTime}</span>
+            </div>
+            <h2 className="font-serif text-xl text-[#f5f0e8] leading-snug mb-3 group-hover:text-[#d4af6a] transition-colors">{post.title}</h2>
+            <p className="text-sm text-[#8b7355] leading-relaxed line-clamp-3">{post.excerpt}</p>
+            <p className="text-[10px] text-[#5a4a38] mt-4">{new Date(post.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- Newsletter Strip ---------------- */
+
+function NewsletterStrip() {
+  const [email, setEmail] = useState("");
+  const [done, setDone] = useState(false);
+
+  function handleSubscribe() {
+    if (!email.includes("@")) return;
+    setDone(true);
+    setEmail("");
+  }
+
+  return (
+    <div className="border-t border-[#1a1612] px-6 md:px-12 py-12 bg-gradient-to-r from-[#0c0a08] via-[#15120e] to-[#0c0a08]">
+      <div className="max-w-xl mx-auto text-center">
+        <Bell size={18} className="text-[#d4af6a] mx-auto mb-3" />
+        <Eyebrow>Stay in the Loop</Eyebrow>
+        <h3 className="font-serif text-2xl text-[#f5f0e8] mb-2">Be First to Know</h3>
+        <p className="text-sm text-[#8b7355] mb-6">New launches, exclusive drops, and behind-the-scenes stories — straight to your inbox.</p>
+        {done ? (
+          <p className="text-sm text-[#d4af6a] flex items-center justify-center gap-2"><CheckCircle2 size={15} /> You're on the list. Welcome to A_W.</p>
+        ) : (
+          <div className="flex gap-2 max-w-sm mx-auto">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubscribe()}
+              placeholder="your@email.com"
+              className="flex-1 bg-[#0c0a08] border border-[#2a2218] rounded-full px-4 py-2.5 text-sm text-[#f5f0e8] placeholder-[#5a4a38] focus:outline-none focus:border-[#d4af6a]/60"
+            />
+            <button onClick={handleSubscribe} className="bg-[#d4af6a] text-[#0a0908] text-xs uppercase tracking-wider px-5 py-2.5 rounded-full font-medium whitespace-nowrap">
+              Subscribe
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Footer ---------------- */
+
+const SOCIAL_LINKS = [
+  {
+    name: "Instagram",
+    handle: "@aw_tech_style",
+    url: "https://instagram.com/aw_tech_style",
+    icon: () => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+      </svg>
+    ),
+  },
+  {
+    name: "TikTok",
+    handle: "@aw_tech_style",
+    url: "https://tiktok.com/@aw_tech_style",
+    icon: () => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.76a4.85 4.85 0 01-1.01-.07z"/>
+      </svg>
+    ),
+  },
+  {
+    name: "Facebook",
+    handle: "@aw_tech_style",
+    url: "https://facebook.com/aw_tech_style",
+    icon: () => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+      </svg>
+    ),
+  },
+];
+
+function Footer() {
+  const { theme } = useStore();
+  return (
+    <footer className="border-t border-[#1a1612]">
+      <NewsletterStrip />
+      <div className="px-6 md:px-12 py-12">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-10">
+          <div className="max-w-xs">
+            <p className="font-serif text-xl tracking-[0.15em] text-[#f5f0e8]">{theme.storeName} <span style={{ color: theme.accent }}>{theme.tagline}</span></p>
+            <p className="text-xs text-[#8b7355] mt-2 leading-relaxed">Luxury fragrance, composed with artisanal craft and an AI-driven studio. Shipping to 40+ countries worldwide.</p>
+
+            {/* Social Links */}
+            <div className="flex gap-3 mt-5">
+              {SOCIAL_LINKS.map((s) => (
+                <a
+                  key={s.name}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`${s.name}: ${s.handle}`}
+                  className="w-9 h-9 rounded-full bg-[#1a1612] border border-[#2a2218] flex items-center justify-center text-[#8b7355] hover:text-[#d4af6a] hover:border-[#d4af6a]/50 transition-colors"
+                >
+                  <s.icon />
+                </a>
+              ))}
+              {/* WhatsApp */}
+              <a
+                href="https://wa.me/923258467107"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="WhatsApp: +923258467107"
+                className="w-9 h-9 rounded-full bg-[#1a1612] border border-[#2a2218] flex items-center justify-center text-[#8b7355] hover:text-[#25D366] hover:border-[#25D366]/50 transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <div className="flex gap-12 text-xs text-[#8b7355]">
+            <div className="space-y-2.5">
+              <p className="text-[#cbbfa8] uppercase tracking-wider text-[10px] mb-3">Shop</p>
+              <p>Collection</p><p>Gift Sets</p><p>Best Sellers</p><p>New Launches</p>
+            </div>
+            <div className="space-y-2.5">
+              <p className="text-[#cbbfa8] uppercase tracking-wider text-[10px] mb-3">Company</p>
+              <p>Our Story</p><p>Journal / Blog</p><p>Careers</p><p>Press</p>
+            </div>
+            <div className="space-y-2.5">
+              <p className="text-[#cbbfa8] uppercase tracking-wider text-[10px] mb-3">Support</p>
+              <p>Shipping & Returns</p><p>Contact</p><p>FAQ</p><p>Track Order</p>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto mt-10 pt-6 border-t border-[#1a1612] flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[10px] text-[#5a4a38]">© {new Date().getFullYear()} {theme.storeName} {theme.tagline}. All rights reserved.</p>
+          <div className="flex gap-4 text-[10px] text-[#5a4a38]">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Cookie Policy</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* ---------------- Root App ---------------- */
+
+function AppInner() {
+  const [page, setPage] = useState("home");
+  const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [activeProduct, setActiveProduct] = useState(null);
+  const [confirmedOrder, setConfirmedOrder] = useState(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const { cart, currentUser, isAdmin, theme } = useStore();
+
+  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+
+  function handleNav(p) {
+    setPage(p);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleCheckoutRequest() {
+    setCartOpen(false);
+    if (!currentUser) {
+      setAuthMode("login");
+      setAuthOpen(true);
+      return;
+    }
+    setCheckoutOpen(true);
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0908] text-[#e8e1d3]" style={{ fontFamily: "'Inter', sans-serif", "--accent": theme.accent }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap');
+        .font-serif { font-family: 'Cormorant Garamond', serif; }
+        ::selection { background: ${theme.accent}; color: #0a0908; }
+        * { scrollbar-width: thin; scrollbar-color: #2a2218 #0a0908; }
+      `}</style>
+
+      <Header cartCount={cartCount} onCartOpen={() => setCartOpen(true)} onNav={handleNav} page={page} onAuthOpen={() => { setAuthMode("login"); setAuthOpen(true); }} />
+
+      {page === "home" && <HomePage onOpen={setActiveProduct} onNav={handleNav} />}
+      {page === "shop" && <ShopPage onOpen={setActiveProduct} />}
+      {page === "profiler" && <ProfilerPage onOpen={setActiveProduct} />}
+      {page === "blog" && <BlogPage />}
+      {page === "account" && <AccountPage onAuthOpen={() => { setAuthMode("login"); setAuthOpen(true); }} />}
+      {page === "admin" && (isAdmin ? <AdminDashboard /> : <AdminGate onSuccess={() => {}} onCancel={() => handleNav("home")} />)}
+
+      {page !== "admin" && <Footer />}
+
+      <ProductModal product={activeProduct} onClose={() => setActiveProduct(null)} />
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} onCheckout={handleCheckoutRequest} />
+      {checkoutOpen && (
+        <Checkout
+          onClose={() => setCheckoutOpen(false)}
+          onComplete={(order) => { setCheckoutOpen(false); setConfirmedOrder(order); }}
+        />
+      )}
+      <OrderConfirmation
+        order={confirmedOrder}
+        onClose={() => setConfirmedOrder(null)}
+        onTrack={() => { setConfirmedOrder(null); handleNav("admin"); }}
+      />
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} mode={authMode} setMode={setAuthMode} />
+      <AIAssistant open={aiOpen} onToggle={() => setAiOpen((o) => !o)} />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <StoreProvider>
+      <AppInner />
+    </StoreProvider>
+  );
+}
+
+/* ============================================================
+README — WHAT'S REAL VS SIMULATED IN THIS DEMO
+
+This build is fully interactive: cart, checkout, order placement,
+invoice generation, admin dashboard with live order status, stock
+management, and the AI scent profiler all genuinely work using
+in-memory state (StoreProvider above).
+
+To take this to a real production business, replace these pieces:
+
+1. AI PRODUCT IMAGES: BottleArt is a CSS-generated placeholder.
+   Swap in calls to an image model (e.g. via the Anthropic API
+   using a prompt built from each product's fragrance profile) and
+   store the resulting URLs against each product.
+
+2. AI DESCRIPTIONS/SEO: ✅ LIVE. generateDescriptionAndSEO_AI() calls the
+   real Anthropic API (Claude) to write unique descriptions and SEO
+   metadata for any product, with a local template fallback if the
+   call fails. Used by "Regenerate" on existing products and by the
+   "AI Product Builder" panel for creating brand-new fragrances from
+   just a name.
+
+3. CHATBOT: answerAssistant is rule-based. Replace with a real LLM
+   call carrying conversation history + a system prompt describing
+   A_W's catalog, policies, and tone.
+
+4. PERSISTENCE: All state (catalog, orders, cart) lives in React
+   state and resets on reload. Replace with a real database
+   (Postgres/Supabase/Firebase) and an authenticated backend API.
+
+5. PAYMENTS: The checkout UI collects card fields but does not
+   process them. Integrate Stripe/PayPal/Razorpay server-side —
+   never handle raw card numbers client-side in production.
+
+6. AUTH: ⚠️ DEMO-LEVEL ONLY. Customer signup/login and the admin
+   login gate are now implemented (StoreProvider: signup, login,
+   adminLogin) — but passwords are only run through simpleHash(),
+   a basic string transform, NOT real cryptographic hashing, and
+   everything lives in browser memory (resets on reload, visible
+   in React state/devtools). This is NOT secure against real
+   attackers. Before going live:
+     - Move auth to a real backend (Node/Express, Supabase Auth,
+       Firebase Auth, Clerk, or Auth0).
+     - Hash passwords server-side with bcrypt or argon2 — never
+       compare passwords in client-side JS.
+     - Store sessions as HTTP-only cookies or signed JWTs, not in
+       React state.
+     - Rate-limit login attempts and add 2FA for the admin account.
+     - Change the demo admin password (admin@awperfume.com /
+       AWAdmin#2026) immediately — it is hardcoded in this file and
+       visible to anyone who reads the source.
+
+8. CUSTOMIZATION: The "Customize" tab in Admin (CustomizePanel) lets
+   you change the store name, tagline, and accent color live. This
+   is also session-only (React state) — to persist branding across
+   reloads/users, save the theme object to your backend/database and
+   load it on app start instead of the local default in StoreProvider.
+
+7. EMAIL: Order confirmation and invoice are shown in-app only.
+   Wire up transactional email (e.g. via SendGrid/Postmark) to
+   actually email customers their invoice PDF.
+============================================================ */
