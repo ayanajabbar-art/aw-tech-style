@@ -1,0 +1,1 @@
+export { default } from './aw-tech-and-style-1.jsx.txt'
